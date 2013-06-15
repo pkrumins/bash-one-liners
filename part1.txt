@@ -1,0 +1,185 @@
+Part I: Working With Files
+
+1. Empty a file (truncate to 0 size)
+
+$ > file
+
+This one-liner uses the output redirection operator >. Redirection of output causes the file to be opened for writing. If the file does not exist it is created; if it does exist it is truncated to zero size. As we're not redirecting anything to the file it remains empty.
+
+If you wish to replace the contents of a file with some string or create a file with specific content, you can do this:
+
+$ echo "some string" > file
+
+This puts the string "some string" in the file.
+
+2. Append a string to a file
+
+$ echo "foo bar baz" >> file
+
+This one-liner uses a different output redirection operator >>, which appends to the file. If the file does not exist it is created. The string appended to the file is followed by a newline. If you don't want a newline appended after the string, add the -n argument to echo:
+
+$ echo -n "foo bar baz" >> file
+
+3. Read the first line from a file and put it in a variable
+
+$ read -r line < file
+
+This one-liner uses the built-in bash command read and the input redirection operator <. The read command reads one line from the standard input and puts it in the line variable. The -r parameter makes sure the input is read raw, meaning the backslashes won't get escaped (they'll be left as is). The redirection command < file opens file for reading and makes it the standard input to the read command.
+
+The read command removes all characters present in the special IFS variable. IFS stands for Internal Field Separator that is used for word splitting after expansion and to split lines into words with the read built-in command. By default IFS contains space, tab, and newline, which means that the leading and trailing tabs and spaces will get removed. If you wish to preserve them, you can set IFS to nothing for the time being:
+
+$ IFS= read -r line < file
+
+This will change the value of IFS just for this command and will make sure the first line gets read into the line variable really raw with all the leading and trailing whitespaces.
+
+Another way to read the first line from a file into a variable is to do this:
+
+$ line=$(head -1 file)
+
+This one-liner uses the command substitution operator $(...). It runs the command in ..., and returns its output. In this case the command is head -1 file that outputs the first line of the file. The output is then assigned to the line variable. Using $(...) is exactly the same as `...`, so you could have also written:
+
+$ line=`head -1 file`
+
+However $(...) is the preferred way in bash as it's cleaner and easier to nest.
+
+4. Read a file line-by-line
+
+$ while read -r line; do
+    # do something with $line
+done < file
+
+This is the one and only right way to read lines from a file one-by-one. This method puts the read command in a while loop. When the read command encounters end-of-file, it returns a positive return code (code for failure) and the while loop stops.
+
+Remember that read trims leading and trailing whitespace, so if you wish to preserve it, clear the IFS variable:
+
+$ while IFS= read -r line; do
+    # do something with $line
+done < file
+
+If you don't like the to put < file at the end, you can also pipe the contents of the file to the while loop:
+
+$ cat file | while IFS= read -r line; do
+    # do something with $line
+done
+
+5. Read a random line from a file and put it in a variable
+
+$ read -r random_line < <(shuf file)
+
+There is no clean way to read a random line from a file with just bash, so we'll need to use some external programs for help. If you're on a modern Linux machine, then it comes with the shuf utility that's in GNU coreutils.
+
+This one-liner uses the process substitution <(...) operator. This process substitution operator creates an anonymous named pipe, and connects the stdout of the process to the write part of the named pipe. Then bash executes the process, and it replaces the whole process substitution expression with the filename of the anonymous named pipe.
+
+When bash sees <(shuf file) it opens a special file /dev/fd/n, where n is a free file descriptor, then runs shuf file with its stdout connected to /dev/fd/n and replaces <(shuf file) with /dev/fd/n so the command effectively becomes:
+
+$ read -r random_line < /dev/fd/n
+
+Which reads the first line from the shuffled file.
+
+Here is another way to do it with the help of GNU sort. GNU sort takes the -R option that randomizes the input.
+
+$ read -r random_line < <(sort -R file)
+
+Another way to get a random line in a variable is this:
+
+$ random_line=$(sort -R file | head -1)
+
+Here the file gets randomly sorted by sort -R and then head -1 takes the first line.
+
+6. Read the first three columns/fields from a file into variables
+
+$ while read -r field1 field2 field3 throwaway; do
+    # do something with $field1, $field2, and $field3
+done < file
+
+If you specify more than one variable name to the read command, it shall split the line into fields (splitting is done based on what's in the IFS variable, which contains a whitespace, a tab, and a newline by default), and put the first field in the first variable, the second field in the second variable, etc., and it will put the remaining fields in the last variable. That's why we have the throwaway variable after the three field variables. if we didn't have it, and the file had more than three columns, the third field would also get the leftovers.
+
+Sometimes it's shorter to just write _ for the throwaway variable:
+
+$ while read -r field1 field2 field3 _; do
+    # do something with $field1, $field2, and $field3
+done < file
+
+Or if you have a file with exactly three fields, then you don't need it at all:
+
+$ while read -r field1 field2 field3; do
+    # do something with $field1, $field2, and $field3
+done < file
+
+Here is an example. Let's say you wish to find out number of lines, number of words, and number of bytes in a file. If you run wc on a file you get these 3 numbers plus the filename as the fourth field:
+
+$ cat file-with-5-lines
+x 1
+x 2
+x 3
+x 4
+x 5
+
+$ wc file-with-5-lines
+ 5 10 20 file-with-5-lines
+
+So this file has 5 lines, 10 words, and 20 chars. We can use the read command to get this info into variables:
+
+$ read lines words chars _ < <(wc file-with-5-lines)
+
+$ echo $lines
+5
+$ echo $words
+10
+$ echo $chars
+20
+
+Similarly you can use here-strings to split strings into variables. Let's say you have a string "20 packets in 10 seconds" in a $info variable and you want to extract 20 and 10. Not too long ago I'd have written this:
+
+$ packets=$(echo $info | awk '{ print $1 }')
+$ time=$(echo $info | awk '{ print $4 }')
+
+However given the power of read and our bash knowledge, we can now do this:
+
+$ read packets _ _ time _ <<< "$info"
+
+Here the <<< is a here-string, which lets you pass strings directly to the standard input of commands.
+
+7. Find the size of a file, and put it in a variable
+
+$ size=$(wc -c < file)
+
+This one-liner uses the command substitution operator $(...) that I explained in one-liner #3. It runs the command in ..., and returns its output. In this case the command is wc -c < file that prints the number of chars (bytes) in the file. The output is then assigned to size variable.
+
+8. Extract the filename from the path
+
+Let's say you have a /path/to/file.ext, and you wish to extract just the filename file.ext. How do you do it? A good solution is to use the parameter expansion mechanism:
+
+$ filename=${path##*/}
+
+This one-liner uses the ${var##pattern} parameter expansion. This expansion tries to match the pattern at the beginning of the $var variable. If it matches, then the result of the expansion is the value of $var with the longest matching pattern deleted.
+
+In this case the pattern is */ which matches at the beginning of /path/to/file.ext and as it's a greedy match, the pattern matches all the way till the last slash (it matches /path/to/). The result of this expansion is then just the filename file.ext as the matched pattern gets deleted.
+
+9. Extract the directory name from the path
+
+This is similar to the previous one-liner. Let's say you have a /path/to/file.ext, and you wish to extract just the path to the file /path/to. You can use the parameter expansion again:
+
+$ dirname=${path%/*}
+
+This time it's the ${var%pattern} parameter expansion that tries to match the pattern at the end of the $var variable. If the pattern matches, then the result of the expansion is the value of $var shortest matching pattern deleted.
+
+In this case the pattern is /*, which matches at the end of /path/to/file.ext (it matches /file.ext). The result then is just the dirname /path/to as the matched pattern gets deleted.
+
+10. Make a copy of a file quickly
+
+Let's say you wish to copy the file at /path/to/file to /path/to/file_copy. Normally you'd write:
+
+$ cp /path/to/file /path/to/file_copy
+
+However you can do it much quicker by using the brace expansion {...}:
+
+$ cp /path/to/file{,_copy}
+
+Brace expansion is a mechanism by which arbitrary strings can be generated. In this particular case /path/to/file{,_copy} generates the string /path/to/file /path/to/file_copy, and the whole command becomes cp /path/to/file /path/to/file_copy.
+
+Similarly you can move a file quickly:
+
+$ mv /path/to/file{,_old}
+
+This expands to mv /path/to/file /path/to/file_old.
