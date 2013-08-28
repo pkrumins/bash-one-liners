@@ -1,0 +1,200 @@
+Part IV: Working with history
+
+1. Erase all shell history
+
+$ rm ~/.bash_history
+
+Bash keeps the shell history in a hidden file called .bash_history. This file is located in your home directory. To get rid of the history, just delete it.
+
+Note that if you logout after erasing the shell history, this last rm ~/.bash_history command will be logged. If you want to hide that you erased shell history, see the next one-liner.
+
+2. Stop logging history for this session
+
+$ unset HISTFILE
+
+The HISTFILE special bash variable points to the file where the shell history should be saved. If you unset it, bash won't save the history.
+
+Alternatively you can point it to /dev/null,
+
+$ HISTFILE=/dev/null
+
+3. Don't log the current command to history
+
+Just start the command with an extra space:
+
+$  command
+
+If the command starts with an extra space, it's not logged to history.
+
+Note that this only works if the HISTIGNORE variable is properly configured. This variable contains : separated values of command prefixes that shouldn't be logged.
+
+For example to ignore spaces set it to this:
+
+HISTIGNORE="[ ]*"
+My HISTIGNORE looks like this:
+
+HISTIGNORE="&:[ ]*"
+The ampersand has a special meaning - don't log repeated commands.
+
+4. Change the file where bash logs command history
+
+$ HISTFILE=~/docs/shell_history.txt
+
+Here we simply change the HISTFILE special bash variable and point it to ~/docs/shell_history.txt. From now on bash will save the command history in that file.
+
+5. Add timestamps to history log
+
+$ HISTTIMEFORMAT="%Y-%m-%d %H:%M:%S"
+
+If you set the HISTTIMEFORMAT special bash variable to a valid date format (see man 3 strftime) then bash will log the timestamps to the history log. It will also display them when you call the history command (see the next one-liner).
+
+6. Show the history
+
+$ history
+
+The history command displays the history list with line numbers. If HISTTIMEFORMAT is set, it also displays the timestamps.
+
+7. Show the last 50 commands from the history
+
+$ history 50
+
+If you specify a numeric argument, such as 50, to history, it prints the last 50 commands from the history.
+
+7. Show the top 10 most used commands from the bash history
+
+$ history |
+    sed 's/^ \+//;s/  / /' |
+    cut -d' ' -f2- |
+    awk '{ count[$0]++ } END { for (i in count) print count[i], i }' |
+    sort -rn |
+    head -10
+
+This one-liner combines bash with sed, cut, awk, sort and head. The perfect combination. Let's walk through this to understand what happens. Let's say the output of history is:
+
+$ history
+    1  rm .bash_history 
+    2  dmesg
+    3  su -
+    4  man cryptsetup
+    5  dmesg
+
+First we use the sed command to remove the leading spaces and convert the double space after the history command number to a single space:
+
+$ history | sed 's/^ \+//;s/  / /'
+1 rm .bash_history 
+2 dmesg
+3 su -
+4 man cryptsetup
+5 dmesg
+
+Next we use cut to remove the first column (the history numbers):
+
+$ history |
+    sed 's/^ \+//;s/  / /' |
+    cut -d' ' -f2-
+
+rm .bash_history 
+dmesg
+su -
+man cryptsetup
+dmesg
+
+Next we use awk to record how many times each command has been seen:
+
+$ history |
+    sed 's/^ \+//;s/  / /' |
+    cut -d' ' -f2- |
+    awk '{ count[$0]++ } END { for (i in count) print count[i], i }'
+
+1 rm .bash_history 
+2 dmesg
+1 su -
+1 man cryptsetup
+
+Then we sort the output numerically and reverse it:
+
+$ history |
+    sed 's/^ \+//;s/  / /' |
+    cut -d' ' -f2- |
+    awk '{ count[$0]++ } END { for (i in count) print count[i], i }' |
+    sort -rn
+
+2 dmesg
+1 rm .bash_history 
+1 su -
+1 man cryptsetup
+
+Finally we take the first 10 lines that correspond to 10 most frequently used commands:
+
+$ history |
+    sed 's/^ \+//;s/  / /' |
+    cut -d' ' -f2- |
+    awk '{ count[$0]++ } END { for (i in count) print count[i], i }' |
+    sort -rn |
+    head -10
+
+Here is what my 10 most frequently used commands look like:
+
+2172 ls
+1610 gs
+252 cd ..
+215 gp
+213 ls -las
+197 cd projects
+155 gpu
+151 cd
+119 gl
+119 cd tests/
+
+Here I've gs that's an alias for git status, gp is git push, gpu is git pull and gl is git log.
+
+8. Execute the previous command quickly
+
+$ !!
+
+That's right. Type two bangs. The first bang starts history substitution, and the second one refers to the last command. Here is an example:
+
+$ echo foo
+foo
+$ !!
+foo
+
+Here the echo foo command was repeated.
+
+It's especially useful if you wanted to execute a command through sudo but forgot. Then all you've to do is run:
+
+$ rm /var/log/something
+rm: cannot remove `/var/log/something': Permission denied
+$
+$ sudo !!   # executes `sudo rm /var/log/something`
+
+9. Execute the most recent command starting with the given string
+
+$ !foo
+
+The first bang starts history substitution, and the second one refers to the most recent command starting with foo.
+
+For example,
+
+$ echo foo
+foo
+$ ls /
+/bin /boot /home /dev /proc /root /tmp
+$ awk -F: '{print $2}' /etc/passwd
+...
+$ !ls
+/bin /boot /home /dev /proc /root /tmp
+
+Here we executed commands echo, ls, awk, and then used !ls to refer to the ls / command.
+
+10. Open the previous command you executed in a text editor
+
+$ fc
+
+Fc opens the previous command in a text editor. It's useful if you've a longer, more complex command and want to edit it.
+
+For example, let's say you've written a one-liner that has an error, such as:
+
+$ for wav in wav/*; do mp3=$(sed 's/\.wav/\.mp3/' <<< "$wav"); ffmpeg -i "$wav" "$m3p"; done
+
+And you can't see what's going on because you've to scroll around, then you can simply type fc to load it in your text editor, and then quickly find that you mistyped mp3 at the end.
